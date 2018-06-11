@@ -8,6 +8,7 @@ import time
 import sys
 import shutil
 import socket
+import re
 
 from .utils import find_executable, get_free_port
 
@@ -15,8 +16,6 @@ MONGOD_BIN = 'mongod'
 DEFAULT_ARGS = [
     # don't flood stdout, we're not reading it
     "--quiet",
-    # save the port
-    "--nohttpinterface",
     # disable unused.
     "--nounixsocket",
     # use a smaller default file size
@@ -30,6 +29,7 @@ START_CHECK_ATTEMPTS = 200
 
 
 class MongoBox(object):
+
     def __init__(self, mongod_bin=None, port=None,
                  log_path=None, db_path=None, scripting=False,
                  prealloc=False, auth=False):
@@ -79,6 +79,9 @@ class MongoBox(object):
 
         if not self.prealloc:
             args.append("--noprealloc")
+
+        if not self.get_version().startswith('3.'):
+            args.append("--nohttpinterface")
 
         self.process = subprocess.Popen(
             args,
@@ -140,3 +143,24 @@ class MongoBox(object):
 
     def __exit__(self, *args, **kwargs):
         self.stop()
+
+    def get_version(self):
+        args = [
+            self.mongod_bin,
+            '--version'
+        ]
+        p = self.process = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        )
+        stdout, stderr = p.communicate()
+        version = None
+        for line in stdout.split('\n'):
+            g = re.match(r'db version v([\d\.]+)', line)
+            if g:
+                version = g.group(1)
+                break
+        if not version:
+            raise Exception('can not parse version')
+        return version
